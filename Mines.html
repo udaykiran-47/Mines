@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>5x5 Mines Game with Guess Helper</title>
+<style>
+  /* Reset & Base */
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+    color: #f0f4f8;
+    margin: 0;
+    padding: 1rem 0.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+  }
+  h1 {
+    margin-bottom: 0.3rem;
+    font-weight: 700;
+    text-align: center;
+  }
+  #game-container {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-gap: 8px;
+    max-width: 350px;
+    width: 100%;
+    margin: 1rem 0;
+  }
+  button.cell {
+    background-color: #144552;
+    border-radius: 10px;
+    border: 2px solid #1db2f5;
+    aspect-ratio: 1 / 1;
+    cursor: pointer;
+    font-size: 1.4rem;
+    color: transparent;
+    transition:
+      background-color 0.3s ease,
+      border-color 0.3s ease,
+      color 0.3s ease;
+    user-select: none;
+  }
+  button.cell:hover:not(.revealed):not(:disabled) {
+    background-color: #1eb9ff;
+    border-color: #0d88d3;
+  }
+  button.cell.revealed {
+    cursor: default;
+    background-color: #0dcaf0;
+    border-color: #0b8abf;
+    color: #042a3e;
+  }
+  button.cell.bomb {
+    background-color: #dc2f02;
+    border-color: #931300;
+    color: #fff;
+  }
+  button.cell.guess-highlight {
+    animation: pulseHighlight 1.5s infinite alternate;
+  }
+  @keyframes pulseHighlight {
+    0% {
+      box-shadow: 0 0 10px 3px rgba(30, 139, 255, 0.8);
+    }
+    100% {
+      box-shadow: 0 0 20px 8px rgba(30, 139, 255, 0.3);
+    }
+  }
+  #controls {
+    margin-top: 1rem;
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  button#guess-btn, button#reset-btn {
+    padding: 0.6rem 1.5rem;
+    font-size: 1rem;
+    font-weight: bold;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #fff;
+    background-color: #1db2f5;
+    box-shadow: 0 3px 6px #0d88d3;
+    transition: background-color 0.3s ease;
+    user-select: none;
+  }
+  button#guess-btn:hover:not(:disabled), button#reset-btn:hover:not(:disabled) {
+    background-color: #0d88d3;
+  }
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+  #status {
+    margin-top: 1rem;
+    font-size: 1.2rem;
+    min-height: 1.4em;
+    text-align: center;
+    max-width: 350px;
+  }
+  /* Mobile adjustments */
+  @media (max-width: 400px) {
+    button.cell {
+      font-size: 1.1rem;
+    }
+    #status {
+      font-size: 1.1rem;
+    }
+  }
+</style>
+</head>
+<body>
+<h1>5x5 Mines Game</h1>
+<p style="max-width: 350px; text-align: center;">
+One bomb is hidden among 25 cells. Click cells to find it. Use <b>Guess Helper</b> to highlight one likely safe guess for you.
+</p>
+
+<div id="game-container" role="grid" aria-label="Minesweeper 5x5 grid">
+  <!-- 25 cells created by JS -->
+</div>
+<div id="controls">
+  <button id="guess-btn" aria-label="Guess helper button">Guess Helper</button>
+  <button id="reset-btn" aria-label="Reset game button" style="display:none;">Play Again</button>
+</div>
+
+<div id="status" role="status" aria-live="polite"></div>
+
+<script>
+  (function(){
+    const size = 5;
+    const totalCells = size * size;
+    const gameContainer = document.getElementById('game-container');
+    const statusEl = document.getElementById('status');
+    const guessBtn = document.getElementById('guess-btn');
+    const resetBtn = document.getElementById('reset-btn');
+
+    let bombIndex;
+    let gameOver = false;
+    let revealedCount = 0;
+
+    // Create cells
+    function createGrid() {
+      gameContainer.innerHTML = '';
+      for (let i = 0; i < totalCells; i++) {
+        let btn = document.createElement('button');
+        btn.className = 'cell';
+        btn.setAttribute('data-index', i);
+        btn.setAttribute('role', 'gridcell');
+        btn.setAttribute('aria-label', `Cell ${i + 1}`);
+        btn.type = 'button';
+        btn.addEventListener('click', onCellClick);
+        gameContainer.appendChild(btn);
+      }
+    }
+
+    // Initialize / reset game
+    function initGame() {
+      gameOver = false;
+      revealedCount = 0;
+      statusEl.textContent = 'Game started! Find the bomb safely.';
+      guessBtn.disabled = false;
+      resetBtn.style.display = 'none';
+      createGrid();
+      bombIndex = Math.floor(Math.random() * totalCells);
+    }
+
+    // Click handler for cells
+    function onCellClick(evt) {
+      if (gameOver) return;
+      const cell = evt.currentTarget;
+      const index = parseInt(cell.getAttribute('data-index'), 10);
+      if (cell.classList.contains('revealed')) return;
+
+      cell.classList.add('revealed');
+      revealedCount++;
+
+      // Remove guess highlight if present
+      guessBtn.disabled = false;
+      clearGuessHighlight();
+
+      if (index === bombIndex) {
+        cell.classList.add('bomb');
+        statusEl.textContent = `💥 Boom! You hit the bomb after revealing ${revealedCount-1} safe cell${revealedCount-1 !== 1 ? 's' : ''}. Game Over.`;
+        gameOver = true;
+        finishGame();
+      } else {
+        cell.textContent = '✔️';
+        if(revealedCount === totalCells - 1) {
+          statusEl.textContent = `🎉 Congratulations! You safely revealed all non-bomb cells! You win!`;
+          gameOver = true;
+          finishGame();
+        } else {
+          statusEl.textContent = `Safe! ${revealedCount- (gameOver ? 1 : 0)} safe cell${revealedCount- (gameOver ? 1 : 0) !== 1 ? 's' : ''} revealed. Keep going!`;
+        }
+      }
+    }
+
+    // Highlight a guess cell for the user
+    function onGuessHelper() {
+      if (gameOver) return;
+
+      // Get all unrevealed cells except bomb
+      const unrevealedCells = Array.from(document.querySelectorAll('button.cell:not(.revealed)'));
+      if (unrevealedCells.length === 0) {
+        statusEl.textContent = 'No cells left to guess.';
+        guessBtn.disabled = true;
+        return;
+      }
+
+      // Randomly select one unrevealed cell to highlight
+      clearGuessHighlight();
+      const randomIndex = Math.floor(Math.random() * unrevealedCells.length);
+      const guessCell = unrevealedCells[randomIndex];
+      guessCell.classList.add('guess-highlight');
+      statusEl.textContent = `🤔 Guess helper suggests Cell ${parseInt(guessCell.getAttribute('data-index'), 10) + 1} to try next.`;
+      guessBtn.disabled = true;
+    }
+
+    // Remove any guess highlight
+    function clearGuessHighlight() {
+      const prevHighlight = document.querySelector('button.cell.guess-highlight');
+      if (prevHighlight) {
+        prevHighlight.classList.remove('guess-highlight');
+      }
+    }
+
+    // End game and offer reset
+    function finishGame() {
+      guessBtn.disabled = true;
+      resetBtn.style.display = 'inline-block';
+
+      // Reveal bomb if not already revealed
+      if (!document.querySelector('button.cell.bomb')) {
+        const bombCell = document.querySelector(`button.cell[data-index="${bombIndex}"]`);
+        if(bombCell) {
+          bombCell.classList.add('bomb', 'revealed');
+          bombCell.textContent = '💣';
+        }
+      }
+
+      // Disable all buttons
+      document.querySelectorAll('button.cell').forEach(cell => cell.disabled = true);
+    }
+
+    resetBtn.addEventListener('click', () => {
+      clearGuessHighlight();
+      initGame();
+    });
+
+    guessBtn.addEventListener('click', onGuessHelper);
+
+    // Initialize on page load
+    initGame();
+
+  })();
+</script>
+</body>
+</html>
+</content>
+</create_file>
